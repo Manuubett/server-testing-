@@ -1,107 +1,60 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Paynecta Test</title>
+  <title>PayNecta Test</title>
   <style>
     body {
-      font-family: Arial;
-      padding: 20px;
-      max-width: 400px;
-      margin: auto;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
     }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
+
+    .card {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 300px;
     }
-    #log {
-      margin-top: 20px;
-      background: #111;
-      color: #0f0;
-      padding: 10px;
-      height: 200px;
-      overflow-y: auto;
-      font-size: 12px;
+
+    h2 {
+      margin-bottom: 20px;
+    }
+
+    .success {
+      margin-top: 15px;
+      color: green;
+      font-weight: bold;
     }
   </style>
 </head>
-<body>  <h2>Paynecta Test</h2>  <input id="phone" placeholder="0712345678" />
-  <input id="amount" placeholder="Amount" type="number" /><button onclick="pay()">Pay</button>
+<body>
 
-  <div id="log"></div>  <script>
-    const BASE_URL = "https://instasend-backend.onrender.com"; // 🔴 change this
+  <div class="card">
+    <h2>Test Payment</h2>
 
-    function log(msg, data = null) {
-      console.log(msg, data || "");
-      const el = document.getElementById("log");
-      el.innerHTML += `<div>> ${msg} ${data ? JSON.stringify(data) : ""}</div>`;
-      el.scrollTop = el.scrollHeight;
-    }
+    <!-- Widget loads here -->
+    <script>
+      function handlePaySuccess(data) {
+        console.log("✅ Payment Success:", data);
 
-    async function pay() {
-      const phone = document.getElementById("phone").value;
-      const amount = document.getElementById("amount").value;
-
-      log("Sending payment request...");
-
-      try {
-        const res = await fetch(`${BASE_URL}/api/payment/pay`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone, amount })
-        });
-
-        const data = await res.json();
-
-        log("Payment response:", data);
-
-        const ref =
-          data.transaction_reference ||
-          data.data?.transaction_reference ||
-          data.reference ||
-          data.id;
-
-        if (!ref) {
-          log("❌ No reference found!");
-          return;
-        }
-
-        log("Reference: " + ref);
-
-        pollStatus(ref);
-
-      } catch (err) {
-        log("❌ Error:", err.message);
+        document.getElementById("status").innerText =
+          "Paid KES " + data.amount + " ✔️";
       }
-    }
+    </script>
 
-    async function pollStatus(ref) {
-      log("⏳ Polling status...");
+    <script src="https://paynecta.co.ke/widget.js"
+      data-slug="cbepayment"
+      data-on-success="handlePaySuccess">
+    </script>
 
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch(`${BASE_URL}/api/payment/status/${ref}`);
-          const data = await res.json();
+    <div id="status" class="success"></div>
+  </div>
 
-          log("Status response:", data);
-
-          const status = (
-            data.status ||
-            data.data?.status ||
-            "PENDING"
-          ).toUpperCase();
-
-          log("Current status: " + status);
-
-          if (["SUCCESS","COMPLETED","FAILED"].includes(status)) {
-            clearInterval(interval);
-            log("✅ FINAL STATUS: " + status);
-          }
-
-        } catch (err) {
-          log("❌ Poll error:", err.message);
-        }
-      }, 3000);
-    }
-  </script></body>
+</body>
 </html>
