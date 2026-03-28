@@ -1,0 +1,107 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Paynecta Test</title>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+      max-width: 400px;
+      margin: auto;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    #log {
+      margin-top: 20px;
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>  <h2>Paynecta Test</h2>  <input id="phone" placeholder="0712345678" />
+  <input id="amount" placeholder="Amount" type="number" /><button onclick="pay()">Pay</button>
+
+  <div id="log"></div>  <script>
+    const BASE_URL = "https://instasend-backend.onrender.com"; // 🔴 change this
+
+    function log(msg, data = null) {
+      console.log(msg, data || "");
+      const el = document.getElementById("log");
+      el.innerHTML += `<div>> ${msg} ${data ? JSON.stringify(data) : ""}</div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    async function pay() {
+      const phone = document.getElementById("phone").value;
+      const amount = document.getElementById("amount").value;
+
+      log("Sending payment request...");
+
+      try {
+        const res = await fetch(`${BASE_URL}/api/payment/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, amount })
+        });
+
+        const data = await res.json();
+
+        log("Payment response:", data);
+
+        const ref =
+          data.transaction_reference ||
+          data.data?.transaction_reference ||
+          data.reference ||
+          data.id;
+
+        if (!ref) {
+          log("❌ No reference found!");
+          return;
+        }
+
+        log("Reference: " + ref);
+
+        pollStatus(ref);
+
+      } catch (err) {
+        log("❌ Error:", err.message);
+      }
+    }
+
+    async function pollStatus(ref) {
+      log("⏳ Polling status...");
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${BASE_URL}/api/payment/status/${ref}`);
+          const data = await res.json();
+
+          log("Status response:", data);
+
+          const status = (
+            data.status ||
+            data.data?.status ||
+            "PENDING"
+          ).toUpperCase();
+
+          log("Current status: " + status);
+
+          if (["SUCCESS","COMPLETED","FAILED"].includes(status)) {
+            clearInterval(interval);
+            log("✅ FINAL STATUS: " + status);
+          }
+
+        } catch (err) {
+          log("❌ Poll error:", err.message);
+        }
+      }, 3000);
+    }
+  </script></body>
+</html>
