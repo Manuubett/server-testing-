@@ -609,7 +609,8 @@ function retryPayment(){
   const uid = _createdUid || auth.currentUser?.uid || localStorage.getItem('cbe_reg_uid');
   if(!uid){ toast('Session expired — please register again','err'); goToStep(1); return; }
   const email = auth.currentUser?.email || localStorage.getItem('cbe_reg_email') || '';
-  const payUrl = `https://paynecta.co.ke/pay/cbepayment?ref=${uid}&email=${encodeURIComponent(email)}`;
+  const callbackUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?paid=1');
+  const payUrl = `https://paynecta.co.ke/pay/cbepayment?ref=${uid}&email=${encodeURIComponent(email)}&callback_url=${callbackUrl}`;
   window.location.href = payUrl;
 }
 
@@ -700,7 +701,8 @@ async function createAccount(){
     // ── Redirect to InstaSend payment ──
     // Replace YOUR_PAYMENT_LINK with your actual InstaSend payment link slug
     // The ref= parameter passes the school UID so the webhook knows who to approve
-    const payUrl = `https://paynecta.co.ke/pay/cbepayment?ref=${_createdUid}&email=${encodeURIComponent(el('aEmail').value.trim())}`;
+    const callbackUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?paid=1');
+    const payUrl = `https://paynecta.co.ke/pay/cbepayment?ref=${_createdUid}&email=${encodeURIComponent(el('aEmail').value.trim())}&callback_url=${callbackUrl}`;
 
     // Short delay so user sees the success toast before redirect
     setTimeout(() => {
@@ -803,8 +805,15 @@ function listenForOwnerResponse(uid){
         return;
       }
 
-      // Pending with a new message from owner
-      if(d.message && d.message.trim()){
+      // Check ownerResponse field (set by webhook for underpayment messages)
+      if(d.ownerResponse && d.ownerResponse.message){
+        const resp = d.ownerResponse;
+        if(resp.status === 'approved'){
+          // Already handled above, skip
+        } else {
+          showOwnerBanner('pending', '📩 Message from Administrator', resp.message, 'https://wa.me/254704518130');
+        }
+      } else if(d.message && d.message.trim()){
         showOwnerBanner('pending','📩 Message from Administrator',d.message,d.contact||'https://wa.me/254704518130');
       }
     }, e=>log('error','Approval listener error',e.message));
@@ -841,6 +850,18 @@ async function checkReturningUser(){
 
 // Run immediately on load
 checkReturningUser();
+
+// ── Handle return from PayNecta payment page ──
+// When user returns after paying, Firebase Auth will fire onAuthStateChanged
+// which restarts listenForOwnerResponse automatically.
+// But if they land on registration.html with ?paid=1, scroll to waiting screen.
+(function handlePaymentReturn(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('paid') === '1'){
+    log('info','Returned from payment page — waiting for webhook');
+    // onAuthStateChanged will pick this up and show screen4
+  }
+})();
 
 // CRITICAL FIX: Handle authenticated users properly
 auth.onAuthStateChanged(async u=>{
@@ -913,12 +934,13 @@ auth.onAuthStateChanged(async u=>{
           return;
         }
 
-        // Pending — show waiting screen, listen for approval
-        log('info','Admin is pending — showing waiting screen');
+        // Pending — show waiting screen, restart listener (user may have returned from payment)
+        log('info','Admin is pending — showing waiting screen, restarting listener');
+        _createdUid = u.uid;
         el('subRef').textContent = u.uid.slice(0,16).toUpperCase();
         goToStep(4);
         el('stepsBar').style.display = 'none';
-        listenForOwnerResponse(u.uid);
+        listenForOwnerResponse(u.uid); // always restart on page load
         if(d.message && d.message.trim()){
           showOwnerBanner('pending','📩 Message from Administrator',d.message,d.contact || 'https://wa.me/254704518130');
         }
